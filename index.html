@@ -114,12 +114,16 @@
 </div>
 
 <script>
-    // ===================== Supabase 配置（已使用你的密钥）=====================
-    const SUPABASE_URL = 'https://jwpaauzedazirdqjaycx.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_4L3ciQbDWJalrsYOvNcybA_ihMjgopc';
+    // ===================== Supabase 配置（已更新密钥为最新格式）=====================
+    const SUPABASE_URL = 'https://jwpaauzedazirdqjaycx.supabase.co/rest/v1/';
+    // 新格式密钥（从 API Keys 页面复制，以 $b_publishable_ 开头）
+    const SUPABASE_ANON_KEY = '$b_publishable_4L3ciQbDWJalrsYQvNcybA_iHjJgopc';
+    // 如果你更愿意用旧的 eyJ 格式，可以替换为下方注释掉的那一行（但新项目可能不兼容）
+    // const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3cGFhdXplZGF6aXJkcWpheWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDAzMjksImV4cCI6MjA5Nzg3NjMyOX0.ogs4USye-EsDtPW9p6a1E3hMqbDhviMZjcRl0g0M1RM';
     // =========================================================
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // 关键改动：使用 sbClient 作为变量名，彻底避开任何全局冲突
+    const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // 全局数据
     let goods = [];
@@ -162,7 +166,7 @@
     // ---------- 云数据库操作 ----------
     async function loadDataFromServer() {
         updateSyncStatus('⏳ 加载数据中...');
-        const { data, error } = await supabase
+        const { data, error } = await sbClient
             .from('goods')
             .select('*')
             .order('id', { ascending: true });
@@ -214,7 +218,7 @@
         const chunkSize = 100;
         for (let i = 0; i < baseData.length; i += chunkSize) {
             const chunk = baseData.slice(i, i + chunkSize);
-            const { error } = await supabase.from('goods').insert(chunk);
+            const { error } = await sbClient.from('goods').insert(chunk);
             if (error) {
                 console.error('初始化数据失败', error);
                 updateSyncStatus('❌ 初始化失败，请检查数据库配置');
@@ -227,7 +231,7 @@
     }
 
     async function saveGoodsToServer(g) {
-        const { data: existing } = await supabase
+        const { data: existing } = await sbClient
             .from('goods')
             .select('id')
             .eq('id', g.id)
@@ -245,14 +249,14 @@
         };
 
         if (existing) {
-            const { error } = await supabase
+            const { error } = await sbClient
                 .from('goods')
                 .update(payload)
                 .eq('id', g.id);
             if (error) throw error;
         } else {
             // 新增时显式指定 id
-            const { error } = await supabase
+            const { error } = await sbClient
                 .from('goods')
                 .insert({ ...payload, id: g.id });
             if (error) throw error;
@@ -260,7 +264,7 @@
     }
 
     async function deleteGoodsFromServer(ids) {
-        const { error } = await supabase
+        const { error } = await sbClient
             .from('goods')
             .delete()
             .in('id', ids);
@@ -268,7 +272,7 @@
     }
 
     async function deleteAllGoods() {
-        const { error } = await supabase
+        const { error } = await sbClient
             .from('goods')
             .delete()
             .neq('id', 0);
@@ -279,7 +283,7 @@
         const chunkSize = 100;
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            const { error } = await supabase.from('goods').insert(chunk);
+            const { error } = await sbClient.from('goods').insert(chunk);
             if (error) throw error;
         }
     }
@@ -718,7 +722,7 @@
         if (confirm('重置所有商品的盘点数量（整件+零散归零）？')) {
             try {
                 updateSyncStatus('⏳ 重置中...');
-                const { error } = await supabase
+                const { error } = await sbClient
                     .from('goods')
                     .update({ whole_qty: 0, piece_qty: 0 })
                     .neq('id', 0);
