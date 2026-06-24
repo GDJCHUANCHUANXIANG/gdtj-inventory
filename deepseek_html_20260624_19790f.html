@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>跟斗九 · 盘点助手（多人在线版）</title>
+    <!-- SheetJS -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js">
+    </script>
+    <!-- 拼音库 -->
+    <script src="https://unpkg.com/pinyin-pro@3.19.6/dist/index.js">
+    </script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif; }
+        body { background: #f5f7fb; padding: 16px 12px 24px; }
+        .app-container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 32px; box-shadow: 0 8px 28px rgba(0,0,0,0.08); overflow: hidden; padding: 20px 16px 24px; }
+        .header h1 { font-size: 1.8rem; font-weight: 700; color: #c2410c; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .header h1 span { background: #fee2e2; font-size: 0.7rem; padding: 2px 10px; border-radius: 40px; color: #b91c1c; font-weight: 500; }
+        .sub { font-size: 0.7rem; color: #6c757d; margin-top: 6px; border-left: 3px solid #f97316; padding-left: 10px; }
+        .stats-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0 20px; }
+        .stat-block { flex: 1; background: #fffbeb; border-radius: 24px; padding: 10px 12px; border: 1px solid #ffe4c4; min-width: 110px; }
+        .stat-label { font-size: 0.7rem; font-weight: 500; color: #b45309; text-transform: uppercase; }
+        .stat-number { font-size: 1.3rem; font-weight: 800; color: #2d3e2c; line-height: 1.2; margin-top: 4px; word-break: break-word; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; background: #f8fafc; padding: 8px 12px; border-radius: 60px; }
+        .toolbar-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        button { background: #2c3e2f; border: none; color: white; padding: 6px 12px; border-radius: 40px; font-weight: 500; cursor: pointer; transition: 0.2s; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 4px; }
+        button.light { background: #eef2ff; color: #1f2937; }
+        button.warning { background: #ea580c; }
+        button.danger { background: #b91c1c; }
+        button.secondary { background: #4b5563; }
+        button:hover { filter: brightness(0.93); transform: translateY(-1px); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; filter: none; }
+        .search-wrapper { margin-bottom: 16px; width: 100%; }
+        .search-wrapper input { width: 100%; padding: 10px 16px; border-radius: 48px; border: 1px solid #e2e8f0; background: white; font-size: 0.85rem; outline: none; transition: 0.2s; }
+        .search-wrapper input:focus { border-color: #f97316; box-shadow: 0 0 0 2px rgba(249,115,22,0.2); }
+        .category-tabs { display: flex; gap: 10px; margin-bottom: 20px; background: #f1f5f9; border-radius: 48px; padding: 4px; }
+        .tab-btn { flex: 1; background: transparent; color: #334155; font-size: 0.8rem; padding: 8px 0; border-radius: 40px; }
+        .tab-btn.active { background: #2c3e2f; color: white; }
+        .cards-grid { display: flex; flex-direction: column; gap: 12px; max-height: 58vh; overflow-y: auto; padding: 2px 2px 8px; }
+        .goods-card { background: white; border-radius: 24px; border: 1px solid #edf2f7; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: 0.2s; display: flex; align-items: center; padding: 12px 12px 12px 8px; gap: 8px; position: relative; }
+        .goods-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.06); border-color: #fed7aa; }
+        .card-checkbox { margin-right: 4px; flex-shrink: 0; }
+        .card-checkbox input { width: 20px; height: 20px; cursor: pointer; accent-color: #e67e22; }
+        .card-icon { width: 48px; height: 48px; background: #fef3c7; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+        .card-info { flex: 1; }
+        .card-title { font-weight: 700; font-size: 0.95rem; color: #1e293b; margin-bottom: 4px; }
+        .card-spec { font-size: 0.68rem; color: #5b6e8c; margin-bottom: 6px; }
+        .price-row { font-size: 0.7rem; background: #f9fafb; padding: 3px 8px; border-radius: 20px; display: inline-block; margin-bottom: 6px; }
+        .stock-summary { display: flex; justify-content: space-between; align-items: baseline; }
+        .stock-badge { font-size: 0.68rem; background: #eef2ff; padding: 2px 10px; border-radius: 20px; font-weight: 600; color: #2c5f2d; }
+        .total-value { font-weight: 800; font-size: 0.8rem; color: #b45309; }
+        .pending-badge { background: #ffe4e2; color: #b91c1c; }
+        .modal-mask { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1100; backdrop-filter: blur(4px); }
+        .modal-card { background: white; border-radius: 36px; width: 500px; max-width: 92%; padding: 24px 22px; box-shadow: 0 30px 40px rgba(0,0,0,0.2); }
+        .modal-card h3 { font-size: 1.3rem; margin-bottom: 16px; color: #2c3e2f; }
+        .form-row { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+        .form-row label { font-weight: 600; font-size: 0.75rem; color: #5e6f8d; }
+        .form-row input, .form-row select { padding: 10px 14px; border-radius: 28px; border: 1px solid #cfdde6; font-size: 0.85rem; }
+        .double-group { display: flex; gap: 12px; margin-bottom: 14px; }
+        .double-group .form-row { flex: 1; margin-bottom: 0; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+        .delete-goods-btn { background: #fff0f0; color: #b91c1c; border: none; padding: 8px 16px; border-radius: 32px; font-weight: 500; }
+        .empty-placeholder { text-align: center; padding: 40px; color: #94a3b8; }
+        .footer-note { margin-top: 18px; text-align: center; font-size: 0.65rem; color: #94a3b8; }
+        .sync-status { text-align: right; font-size: 0.7rem; margin-bottom: 4px; color: #64748b; }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="header">
+        <h1>跟斗九·盘点助手 <span>多人版</span></h1>
+        <div class="sub">📋 所有设备看到同一份数据 · 点击商品名盘点</div>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-block"><div class="stat-label">📦 库存总价值</div><div class="stat-number" id="totalValue">¥0.00</div></div>
+        <div class="stat-block"><div class="stat-label">🍷 酒水食材价值</div><div class="stat-number" id="foodValue">¥0.00</div></div>
+        <div class="stat-block"><div class="stat-label">🧻 易耗品价值</div><div class="stat-number" id="supplyValue">¥0.00</div></div>
+    </div>
+    <div class="stats-row" style="margin-top:-8px">
+        <div class="stat-block"><div class="stat-label">✅ 已盘点 / 总品类</div><div class="stat-number" id="countStats">0 / 0</div></div>
+    </div>
+    <div class="sync-status" id="syncStatus">⏳ 连接服务器中...</div>
+
+    <div class="toolbar">
+        <div class="toolbar-group">
+            <button id="addGoodsBtn" class="light">➕ 添加商品</button>
+            <button id="selectAllBtn" class="light">☑️ 全选/反选</button>
+            <button id="batchDeleteBtn" class="danger">🗑️ 批量删除</button>
+        </div>
+        <div class="toolbar-group">
+            <button id="exportExcelBtn" class="light">📎 导出盘点数据</button>
+            <button id="importExcelBtn" class="light">📂 导入盘点数据</button>
+            <button id="resetQtyBtn" class="warning">🔄 重置盘点数据</button>
+        </div>
+        <input type="file" id="importFileInput" accept=".xlsx, .xls" style="display:none" />
+    </div>
+
+    <div class="search-wrapper">
+        <input type="text" id="searchInput" placeholder="🔍 搜品名/拼音首字母（如 XC → 蟹柳）" autocomplete="off">
+    </div>
+
+    <div class="category-tabs" id="categoryTabs">
+        <button data-filter="全部" class="tab-btn active">全部</button>
+        <button data-filter="酒水食材" class="tab-btn">🍷 酒水食材</button>
+        <button data-filter="易耗品" class="tab-btn">🧻 易耗品</button>
+    </div>
+
+    <div id="cardsContainer" class="cards-grid"></div>
+    <div class="footer-note">💡 点击商品修改数量/单价 | 复选框可多选后批量删除 | 所有人看到同一份数据</div>
+</div>
+
+<script>
+    // ===================== Supabase 配置（已使用你的密钥）=====================
+    const SUPABASE_URL = 'https://jwpaauzedazirdqjaycx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3cGFhdXplZGF6aXJkcWpheWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDAzMjksImV4cCI6MjA5Nzg3NjMyOX0.ogs4USye-EsDtPW9p6a1E3hMqbDhviMZjcRl0g0M1RM';
+    // =========================================================
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 全局数据
+    let goods = [];
+    let currentSearch = "";
+    let currentCategory = "全部";
+
+    // ---------- 拼音搜索辅助 ----------
+    function getPinyinInitials(str) {
+        if (!str) return "";
+        try {
+            const { pinyin } = window.pinyinPro;
+            return pinyin(str, { toneType: 'none', type: 'array' }).map(w => w[0].toLowerCase()).join('');
+        } catch(e) {
+            return str.toLowerCase();
+        }
+    }
+
+    function matchSearch(item) {
+        if (!currentSearch) return true;
+        const kw = currentSearch.toLowerCase();
+        if (item.name.toLowerCase().includes(kw)) return true;
+        if (getPinyinInitials(item.name).includes(kw)) return true;
+        return false;
+    }
+
+    function computeValue(g) {
+        return (g.wholeQty * g.wholePrice) + (g.pieceQty * g.piecePrice);
+    }
+
+    function isChecked(g) {
+        return (g.wholeQty + g.pieceQty) > 0;
+    }
+
+    function getFilteredAndSorted() {
+        let filtered = goods.filter(g => (currentCategory === "全部" || g.category === currentCategory) && matchSearch(g));
+        filtered.sort((a,b) => (isChecked(b) - isChecked(a)) || a.id - b.id);
+        return filtered;
+    }
+
+    // ---------- 云数据库操作 ----------
+    async function loadDataFromServer() {
+        updateSyncStatus('⏳ 加载数据中...');
+        const { data, error } = await supabase
+            .from('goods')
+            .select('*')
+            .order('id', { ascending: true });
+
+        if (error) {
+            console.error('加载失败', error);
+            updateSyncStatus('❌ 加载失败，请刷新重试');
+            goods = [];
+            renderCards();
+            return;
+        }
+
+        // 字段映射
+        goods = data.map(row => ({
+            id: row.id,
+            category: row.category,
+            name: row.name,
+            spec: row.spec || '',
+            unit: row.unit || '',
+            wholePrice: Number(row.whole_price),
+            wholeQty: Number(row.whole_qty),
+            piecePrice: Number(row.piece_price),
+            pieceQty: Number(row.piece_qty),
+        }));
+        updateSyncStatus('✅ 已同步');
+        renderCards();
+
+        // 首次使用，数据库为空，自动初始化基础数据
+        if (goods.length === 0) {
+            await initializeBaseData();
+        }
+    }
+
+    async function initializeBaseData() {
+        updateSyncStatus('⏳ 首次使用，正在初始化基础数据...');
+        const baseData = buildInitialData().map(g => ({
+            category: g.category,
+            name: g.name,
+            spec: g.spec,
+            unit: g.unit,
+            whole_price: g.wholePrice,
+            whole_qty: g.wholeQty,
+            piece_price: g.piecePrice,
+            piece_qty: g.pieceQty,
+            // id 由数据库自动生成
+        }));
+
+        // 分批插入
+        const chunkSize = 100;
+        for (let i = 0; i < baseData.length; i += chunkSize) {
+            const chunk = baseData.slice(i, i + chunkSize);
+            const { error } = await supabase.from('goods').insert(chunk);
+            if (error) {
+                console.error('初始化数据失败', error);
+                updateSyncStatus('❌ 初始化失败，请检查数据库配置');
+                return;
+            }
+        }
+
+        updateSyncStatus('✅ 基础数据已就绪');
+        await loadDataFromServer(); // 重新加载，获取带 id 的数据
+    }
+
+    async function saveGoodsToServer(g) {
+        const { data: existing } = await supabase
+            .from('goods')
+            .select('id')
+            .eq('id', g.id)
+            .maybeSingle();
+
+        const payload = {
+            category: g.category,
+            name: g.name,
+            spec: g.spec,
+            unit: g.unit,
+            whole_price: g.wholePrice,
+            whole_qty: g.wholeQty,
+            piece_price: g.piecePrice,
+            piece_qty: g.pieceQty,
+        };
+
+        if (existing) {
+            const { error } = await supabase
+                .from('goods')
+                .update(payload)
+                .eq('id', g.id);
+            if (error) throw error;
+        } else {
+            // 新增时显式指定 id
+            const { error } = await supabase
+                .from('goods')
+                .insert({ ...payload, id: g.id });
+            if (error) throw error;
+        }
+    }
+
+    async function deleteGoodsFromServer(ids) {
+        const { error } = await supabase
+            .from('goods')
+            .delete()
+            .in('id', ids);
+        if (error) throw error;
+    }
+
+    async function deleteAllGoods() {
+        const { error } = await supabase
+            .from('goods')
+            .delete()
+            .neq('id', 0);
+        if (error) throw error;
+    }
+
+    async function batchInsertGoods(rows) {
+        const chunkSize = 100;
+        for (let i = 0; i < rows.length; i += chunkSize) {
+            const chunk = rows.slice(i, i + chunkSize);
+            const { error } = await supabase.from('goods').insert(chunk);
+            if (error) throw error;
+        }
+    }
+
+    function updateSyncStatus(text) {
+        const el = document.getElementById('syncStatus');
+        if (el) el.textContent = text;
+    }
+
+    // ---------- 构建初始数据（全部186条商品）----------
+    function buildInitialData() {
+        const rows = [
+            [1,"酒水食材","光明LOOK原味485ML/瓶","20瓶/件","瓶",10,8,0,10],
+            [2,"酒水食材","旺仔牛奶","8瓶/件","件",80,0,6,10],
+            [3,"酒水食材","可乐（拉罐）","330Ml*24","件",40,1,43,1.79],
+            [4,"酒水食材","雪碧（拉罐）","330Ml*24","件",40,4,34,1.79],
+            [5,"酒水食材","勇闯天涯","500ml*12","件",36,1,39,3],
+            [6,"酒水食材","椰树椰奶汁（310）","310ml*24","件",145,1,32,6.04],
+            [7,"酒水食材","王老吉","310ml*24","件",50,3,26,2.29],
+            [8,"酒水食材","哇哈哈苏打水(小)","350ml*24","件",42,1,23,1.83],
+            [9,"酒水食材","超级勇闯","500ml*12","件",36,5,0,3],
+            [10,"酒水食材","雪花纯生","500ml*12","件",39,10,55,3.25],
+            [11,"酒水食材","匠心","500ml*12","件",60,3,13,5.66],
+            [12,"酒水食材","梅见（330）青梅酒","330Ml*12","件",260,0,11,21.66],
+            [13,"酒水食材","郎酒歪嘴","100ml*24","件",298,1,21,13.38],
+            [14,"酒水食材","五粮液歪嘴","100ml*24","件",282,1,14,11.66],
+            [15,"酒水食材","蓝顺郎酒（480）","480ml*12","件",750,0,5,62.5],
+            [16,"酒水食材","劲酒（125）","125ml*24","件",290,1,0,11.71],
+            [17,"酒水食材","大窑嘉宾（橙子）","520ml*12","件",32,3,0,2.92],
+            [18,"酒水食材","大窑嘉宾（荔枝）","520ml*12","件",32,3,4,2.92],
+            [19,"酒水食材","大窑嘉宾（嘉宾）","520ml*12","瓶",32,4,16,2.92],
+            [20,"酒水食材","唯怡小豆奶","245ml*20","件",38,3,18,1.9],
+            [21,"酒水食材","VE唯怡（960）","960ml*12","件",88,3,7,7.33],
+            [22,"酒水食材","中怡宝（555）","520ml*24","件",24,1,0,1],
+            [23,"酒水食材","喜力星银（330）","330ml*24","件",80,4,27,3.33],
+            [24,"酒水食材","雪花脸谱418","418ml*12","件",95,3,18,8.16],
+            [25,"酒水食材","北冰洋玻璃瓶汽水","248ml*24","件",68,2,16,2.86],
+            [26,"酒水食材","大可乐","12瓶/件","件",50,2,2,4.33],
+            [27,"酒水食材","大雪碧","12瓶/件","件",50,1,18,4.33],
+            [28,"酒水食材","大鲜橙多","6瓶/件","件",35,1,7,6],
+            [29,"酒水食材","红牛","24瓶/件","件",118,0,13,5],
+            [30,"酒水食材","江小白","100ml*24瓶/件","件",284,0,9,11.83],
+            [31,"酒水食材","雪花精酿","6瓶/件","件",68,0,5,11],
+            [32,"酒水食材","雪花鲜","6瓶/件","件",60,1,7,10],
+            [33,"酒水食材","大喜力","500ml*12瓶","件",160,1,0,5],
+            [34,"酒水食材","马尔斯绿","500ml*12瓶","件",14,7,18,1.16],
+            [35,"酒水食材","喷射奶油","12瓶/箱1L","瓶",37,0,0,37],
+            [36,"酒水食材","金桔柠檬果酱","1.2kg*12桶/箱","桶",29,0,0,29],
+            [37,"酒水食材","红西柚果酱","1.2kg*12桶/箱","桶",32,0,0,32],
+            [38,"酒水食材","茉莉绿茶","称重","包",13,5,0,13],
+            [39,"酒水食材","草莓果溶","1.3kg*12桶/箱","桶",30,0,0,30],
+            [40,"酒水食材","茉莉花茶酱","2.5kg*桶","桶",29,2.5,0,29],
+            [41,"酒水食材","樱花奶豆腐","1kg*25袋/件","袋",32,0,0,32],
+            [42,"酒水食材","酸梅汤","12瓶/件","件",192,0,6,16],
+            [43,"酒水食材","牛油底料","500g*30袋/件","件",390,9,0,13],
+            [44,"酒水食材","牛油红油","500g*30袋/件","件",435,1,35,14.5],
+            [45,"酒水食材","2#调味粉","50*200包/件","袋",270,4,0,1.35],
+            [46,"酒水食材","5#番茄料包250g","250g*100袋/桶","袋",500,1,84,5],
+            [47,"酒水食材","大香油12.5L","12.5L*2桶/件","件",255,1.5,0,122.5],
+            [48,"酒水食材","香辣干碟","2.5kg*6袋/件","件",480,0,2,80],
+            [49,"酒水食材","麻辣腌肉粉","1kg*12袋/件","件",396,2,2,33],
+            [50,"酒水食材","麻辣牛肉腌粉","500g*20/件","件",344,0,5,17.2],
+            [51,"酒水食材","五香牛肉腌粉","1kg*10袋/件","件",356,2,0,35.6],
+            [52,"酒水食材","菌汤料包","200g*100袋/桶","袋",500,1,7,5],
+            [53,"酒水食材","N1.香料","26/斤","斤",30,10,0,30],
+            [54,"酒水食材","虎皮鸡爪","1kg*10袋/件","件",330,0,6,31.9],
+            [55,"酒水食材","午餐肉","340g*24厅","件",190,0,0,7.91],
+            [56,"酒水食材","腌肉红油","25kg/桶","桶",380,1,0,13.8],
+            [57,"酒水食材","红花椒","43.8/斤","斤",48,6,0,48],
+            [58,"酒水食材","满天星节","21/斤","斤",17,17,0,17],
+            [59,"酒水食材","新一代海椒条","16/斤","斤",13,12.8,0,13],
+            [60,"酒水食材","火锅川宽粉","240g*50袋/件","件",85,3,0,1.8],
+            [61,"酒水食材","天味小香肠","85g*50袋/件","件",300,1,35,6.1],
+            [62,"酒水食材","黄金豆","2.5kg*6袋/箱","件",85,1,0,19.1],
+            [63,"酒水食材","味达美蚝油","6kg*2桶","件",52,2.5,0,25],
+            [64,"酒水食材","王中王豆皮3.5KG","3.5kg/件","件",55,1,0,8.28],
+            [65,"酒水食材","干豆皮节","5斤/袋","袋",16,2,0,4],
+            [66,"酒水食材","魔芋丝结","2.5kg*4袋/件","件",55,0,0,13.75],
+            [67,"酒水食材","云枫源红醋","5l*2桶/件","件",34,2,0,17],
+            [68,"酒水食材","食用碱","200g*50袋/件","件",85,0,3,1.7],
+            [69,"酒水食材","小苏打","200g*50袋/件","件",85,0,2,1.7],
+            [70,"酒水食材","贡菜","10斤/件","件",330,2,0,42],
+            [71,"酒水食材","冰糖","50斤/件","袋",185,1,0,3.7],
+            [72,"酒水食材","红椒娇小米辣（泡）","2kg*6袋/件","件",33,1,1,5.5],
+            [73,"酒水食材","沈师傅鸡蛋干","150g*50袋/件","件",195,0,39,3.9],
+            [74,"酒水食材","大碗面","60个/25件","件",21,2,0,0.43],
+            [75,"酒水食材","江津白酒","5L*4","件",110,0.5,0,27.5],
+            [76,"酒水食材","袋装保宁醋","300ml*30袋/箱","件",48.4,2,0,1.61],
+            [77,"酒水食材","枸杞","称重","斤",20,4.8,0,0],
+            [78,"酒水食材","盐","1kg*25袋/件","件",65,0,18,1.3],
+            [79,"酒水食材","泡豇豆","38/6袋/2kg","件",32,2,0,6.66],
+            [80,"酒水食材","金锣火腿肠170g","170g*18支/箱","件",29.5,3,0,1.83],
+            [81,"酒水食材","黑胡椒碎","","件",28,4.2,0,0],
+            [82,"酒水食材","花椒面","称重","斤",40,3.2,0,0],
+            [83,"酒水食材","海带中扣","22/件","件",16,7,0,0],
+            [84,"酒水食材","海天老抽王","1.9L*6瓶","件",88,0,4,14.66],
+            [85,"酒水食材","糖蒜","12斤/桶","桶",45,3,0,0],
+            [86,"酒水食材","大豆油","12.5l*2瓶/件","件",216,0,0,108],
+            [87,"酒水食材","丁点儿鸭肠粉","300g*12瓶","件",276,1,0,23],
+            [88,"酒水食材","味达美生抽","1.9L*6瓶","件",68,1,1,11.33],
+            [89,"酒水食材","白糖","称重","斤",3,1,0,0],
+            [90,"酒水食材","特级小灰枣","10kg/件","件",75,0,12,3.75],
+            [91,"酒水食材","妖肉魔芋","200g*40袋","件",100,0,25,2.5],
+            [92,"酒水食材","素毛肚","1kg*5袋/件","件",52,1,0,10.4],
+            [93,"酒水食材","白醋","550ml*20","件",40,0,0,2],
+            [94,"酒水食材","鸡精","900g*10袋//件","件",195,0,3,19.5],
+            [95,"酒水食材","味精","25kg/袋","袋",190,0,7.6,3.8],
+            [96,"酒水食材","红葱酱","1kg*12袋/件","件",345,0,10,30.87],
+            [97,"酒水食材","孜然粉","","件",20,4.5,0,0],
+            [98,"酒水食材","中粗辣椒面","","件",9,8.1,0,0],
+            [99,"酒水食材","鸡蛋","称重","斤",5.5,6,0,0],
+            [100,"酒水食材","挂面","12/1把","把",12.5,0,0,12.5],
+            [101,"酒水食材","珍珠米","25kg/袋","袋",135,1,0,2.3],
+            [102,"酒水食材","醪糟","10斤*桶","斤",3.5,0,0,0],
+            [103,"酒水食材","原味牛肉粒","1kg*10袋/件","件",455,1,9,45.5],
+            [104,"酒水食材","麻辣小郡肝","1kg*10袋/件","件",290,2,0,29],
+            [105,"酒水食材","包菜牛肉片","1kg*10袋/件","件",540,0,3,54],
+            [106,"酒水食材","麻辣掌中宝","1kg*10袋/件","件",320,2,5,32],
+            [107,"酒水食材","蒜香掌中宝","1kg*10袋/件","件",320,0,0,32],
+            [108,"酒水食材","麻辣鸭胗片","1kg*10袋/件","件",340,2,7,34],
+            [109,"酒水食材","肥牛","3.572kg*7板/件","件",1400,0,35,28],
+            [110,"酒水食材","麻辣肺片","1kg*10袋/件","件",185,2,1,20],
+            [111,"酒水食材","红油脆肚","1kg*10袋/件","件",225,1,7,22.5],
+            [112,"酒水食材","黄瓜条","斤","斤",32.5,0,5.2,32.5],
+            [113,"酒水食材","吊龙","斤","斤",44,0,0,44],
+            [114,"酒水食材","美好小酥肉","1kg*10袋/件","件",345,0,0,30],
+            [115,"酒水食材","美好卤香冒节子","1.25kg*4袋/220","件",210,2,2,60],
+            [116,"酒水食材","美好开花脆皮肠","210g*20袋/件","件",100,1,11,5],
+            [117,"酒水食材","美好火腿肠30g","30g*10支*14袋/件","件",118,1,5,8.21],
+            [118,"酒水食材","白味牛大肚","20斤/件","件",520,0,13.5,26],
+            [119,"酒水食材","虾滑","150g*30袋/件","件",260,1,7,9.5],
+            [120,"酒水食材","虾饺","100g*30盒","件",88,0,22,2.93],
+            [121,"酒水食材","撒尿牛丸","5斤*4袋","件",92,0,2,23],
+            [122,"酒水食材","藤椒油黄鸡","500g*20袋/件","件",185,0,0,9.25],
+            [123,"酒水食材","牛蹄筋","20斤/4袋件","件",495,0,0,123.75],
+            [124,"酒水食材","去骨鸭掌","155/9斤","件",145,0,3,16.11],
+            [125,"酒水食材","鸡中翅","1kg*10袋/件","件",300,1,0,30],
+            [126,"酒水食材","鸡尖","1kg*10袋/件","件",75,1,4,7.5],
+            [127,"酒水食材","二刀腊肉","17元/斤","斤",17,4.4,0,17],
+            [128,"酒水食材","安井小油条","500g*10袋/件","件",63.5,0,5,6.35],
+            [129,"酒水食材","郡把","1kg*12袋/件","件",192.5,0,8,16.66],
+            [130,"酒水食材","红糖糍粑","260g*12根*20袋/件","件",68,0,0,3.4],
+            [131,"酒水食材","（渔之萃）蟹柳","500g*20/件","件",165,1,3,8.25],
+            [132,"酒水食材","八爪鱼","7斤/件","件",120,0,0,19.29],
+            [133,"酒水食材","青虾","6盒/件","件",360,0,0,60],
+            [134,"酒水食材","鲍鱼","9斤/2袋/件","件",480,0,0,240],
+            [135,"酒水食材","耗儿鱼50/100-特","85条/件","件",535,0,0,0],
+            [136,"酒水食材","扇贝","2袋/10斤/件","件",85,0,0,42.5],
+            [137,"酒水食材","冻猪排骨","20斤/件","件",350,0,0,17.75],
+            [138,"酒水食材","黑豆腐","6元/盒","盒",6,0,0,6],
+            [139,"酒水食材","鲜毛肚","35/斤","斤",35,0,0,35],
+            [140,"酒水食材","鲜鸭肠","13/斤","斤",11,0,0,13],
+            [141,"酒水食材","黑鱿鱼","12/斤","斤",12,5,0,12],
+            [142,"酒水食材","发毛肚（大叶）","斤","斤",29,3,0,29],
+            [143,"酒水食材","千层肚","斤","斤",31,5,0,31],
+            [144,"酒水食材","猪黄喉","斤","斤",27,2,0,27],
+            [145,"酒水食材","柠檬","称重","斤",7,0,0,0],
+            [146,"易耗品","竹签","1件/10000根","件",190,0,0,190],
+            [147,"易耗品","擦手纸","1*20个/65","件",41,0,8,3.25],
+            [148,"易耗品","厕所大卷子","1*12卷/65","件",41,0,6,5.41],
+            [149,"易耗品","黄色馒头纸","100个/件","件",35,0,0,0.35],
+            [150,"易耗品","收银纸","50卷/箱/160","件",160,0,12,3.2],
+            [151,"易耗品","A垃圾袋","85*90/10把/件","件",135,0,4,12.8],
+            [152,"易耗品","30打包袋","100把/件","件",230,0,20,2.3],
+            [153,"易耗品","打包盒1500","200个/件","件",80,0.75,0,20],
+            [154,"易耗品","84消毒液","4瓶/件","件",52,0,2,13],
+            [155,"易耗品","洁厕王","30瓶/件","件",36,0,4,1.2],
+            [156,"易耗品","洗洁精","50斤*桶","桶",70,1,0,70],
+            [157,"易耗品","消洗灵","20包*件","件",66,0,6,3.3],
+            [158,"易耗品","40保鲜膜","6个*件","件",95,1,0,15.83],
+            [159,"易耗品","25保鲜膜","6个*件","件",65,0,4,10.83],
+            [160,"易耗品","英科手套","150/100只*10盒*件","盒",83,0,5,8.3],
+            [161,"易耗品","一次性纸杯","40袋/件","件",78,0,12,1.95],
+            [162,"易耗品","烧碱","7.9袋/袋","袋",7.9,0,0,7.9],
+            [163,"易耗品","一次性筷子","50包/件","件",42.5,0,4,0.85],
+            [164,"易耗品","勺子","20袋*100个","件",17,0,5,0.85],
+            [165,"易耗品","杯子700ml","500个/件","件",135,0,200,0.27],
+            [166,"易耗品","杯盖","1000个/件","件",85,0,200,0.085],
+            [167,"易耗品","吸管","20包/件","件",45,0,5,2.25],
+            [168,"易耗品","小垃圾袋","","件",132,0,0,2.64],
+            [169,"酒水食材","红花郎酒","480ml*12瓶","件",425,0,3,35.42],
+            [170,"酒水食材","老雪花","640ml*12瓶","件",35,6,6,2.91],
+            [171,"酒水食材","小可乐","300ml*24瓶","件",28.5,1,15,1.19],
+            [172,"酒水食材","小雪碧","300ml*24瓶","件",28,1,11,1.17],
+            [173,"酒水食材","樱花奶豆腐粉","包","件",29,3.5,0,29],
+            [174,"酒水食材","冰镇西瓜精酿","1L*6瓶","件",76,0,1,12.67],
+            [175,"酒水食材","杨枝甘露基地粉","1kg*袋","袋",14.5,1.5,0,0],
+            [176,"酒水食材","草莓冰基地粉","1000g*1袋","袋",35.5,0,0,0],
+            [177,"酒水食材","泰式绿茶","2.5kg*1桶","件",40,0,0,8],
+            [178,"酒水食材","糖浆","","件",0,0,0,0],
+            [179,"酒水食材","西柚茉莉","","件",0,0,0,0],
+            [180,"酒水食材","草莓果酱","2.5kg*桶","桶",20,0,0,20],
+            [181,"酒水食材","干木耳","称重","斤",0,0,8,27],
+            [182,"酒水食材","箭笋","500g*20袋","件",100,0,14,5],
+            [183,"酒水食材","麻辣香肠","称重","斤",17.5,4,0,17.5],
+            [184,"酒水食材","鱼肉丸","2.5kg*4袋","件",102,0,3,25.5],
+            [185,"酒水食材","鱼豆腐","2.5kg*4袋","件",140,0,0,35],
+            [186,"酒水食材","芝麻酱","4桶*1件","件",255,0,2,63.75]
+        ];
+        return rows.map((r, idx) => ({
+            id: idx,  // 仅本地使用，实际插入时不传 id
+            category: r[1],
+            name: r[2],
+            spec: r[3] || '',
+            unit: r[4] || '',
+            wholePrice: Number(r[5]),
+            wholeQty: Number(r[6]),
+            pieceQty: Number(r[7]),
+            piecePrice: Number(r[8]),
+        }));
+    }
+
+    // ---------- UI 渲染 ----------
+    function updateStats() {
+        let total = 0, foodTotal = 0, supplyTotal = 0, checkedCount = 0;
+        goods.forEach(g => {
+            const val = computeValue(g);
+            total += val;
+            if (g.category === '酒水食材') foodTotal += val;
+            else if (g.category === '易耗品') supplyTotal += val;
+            if (g.wholeQty + g.pieceQty > 0) checkedCount++;
+        });
+        document.getElementById('totalValue').innerHTML = `¥${total.toFixed(2)}`;
+        document.getElementById('foodValue').innerHTML = `¥${foodTotal.toFixed(2)}`;
+        document.getElementById('supplyValue').innerHTML = `¥${supplyTotal.toFixed(2)}`;
+        document.getElementById('countStats').innerHTML = `${checkedCount} / ${goods.length}`;
+    }
+
+    function renderCards() {
+        const container = document.getElementById('cardsContainer');
+        const filtered = getFilteredAndSorted();
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="empty-placeholder">📭 没有找到相关商品，试试其他关键词</div>';
+            updateStats();
+            return;
+        }
+        container.innerHTML = filtered.map(g => {
+            const totalVal = computeValue(g);
+            const hasStock = isChecked(g);
+            const priceText = `整箱 ¥${g.wholePrice.toFixed(2)} / 散 ¥${g.piecePrice.toFixed(2)}`;
+            const specText = g.spec ? `${g.spec} | 单位：${g.unit}` : `单位：${g.unit}`;
+            const statusText = hasStock ? `📦 整件:${g.wholeQty}  🔸 零散:${g.pieceQty}` : "待盘点";
+            return `
+                <div class="goods-card" data-id="${g.id}">
+                    <div class="card-checkbox"><input type="checkbox" class="goods-checkbox" value="${g.id}"></div>
+                    <div class="card-icon">${g.category === '酒水食材' ? '🍷' : '🧻'}</div>
+                    <div class="card-info">
+                        <div class="card-title">${escapeHtml(g.name)}</div>
+                        <div class="card-spec">${escapeHtml(specText)}</div>
+                        <div class="price-row">💰 ${priceText}</div>
+                        <div class="stock-summary">
+                            <span class="stock-badge ${!hasStock ? 'pending-badge' : ''}">${statusText}</span>
+                            <span class="total-value">¥${totalVal.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        document.querySelectorAll('.goods-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                if(e.target.type !== 'checkbox') openEditModal(parseInt(card.dataset.id));
+            });
+        });
+        updateStats();
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m] || m);
+    }
+
+    // ---------- 模态框：编辑商品 ----------
+    function openEditModal(id) {
+        const goodsItem = goods.find(g => g.id === id);
+        if (!goodsItem) return;
+        const modalDiv = document.createElement('div'); modalDiv.className = 'modal-mask';
+        modalDiv.innerHTML = `
+            <div class="modal-card">
+                <h3>📝 盘点录入 / 编辑</h3>
+                <div class="form-row"><label>品名</label><input id="modalName" value="${escapeHtml(goodsItem.name)}" readonly style="background:#f3f4f6;"></div>
+                <div class="form-row"><label>规格</label><input id="modalSpec" value="${escapeHtml(goodsItem.spec)}" placeholder="规格"></div>
+                <div class="double-group">
+                    <div class="form-row"><label>整件单价 (¥)</label><input id="modalWholePrice" type="number" step="any" value="${goodsItem.wholePrice}"></div>
+                    <div class="form-row"><label>零散单价 (¥)</label><input id="modalPiecePrice" type="number" step="any" value="${goodsItem.piecePrice}"></div>
+                </div>
+                <div class="double-group">
+                    <div class="form-row"><label>整件数量</label><input id="modalWholeQty" type="number" step="any" value="${goodsItem.wholeQty}"></div>
+                    <div class="form-row"><label>零散数量</label><input id="modalPieceQty" type="number" step="any" value="${goodsItem.pieceQty}"></div>
+                </div>
+                <div class="modal-actions">
+                    <button id="modalSaveBtn" style="background:#2c3e2f;">✅ 保存盘点</button>
+                    <button id="modalDeleteBtn" class="delete-goods-btn">🗑️ 删除商品</button>
+                    <button id="modalCancelBtn" class="secondary">取消</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modalDiv);
+
+        const saveBtn = modalDiv.querySelector('#modalSaveBtn');
+        const deleteBtn = modalDiv.querySelector('#modalDeleteBtn');
+        const cancelBtn = modalDiv.querySelector('#modalCancelBtn');
+
+        saveBtn.onclick = async () => {
+            const newWholePrice = parseFloat(modalDiv.querySelector('#modalWholePrice').value) || 0;
+            const newPiecePrice = parseFloat(modalDiv.querySelector('#modalPiecePrice').value) || 0;
+            const priceChanged = (newWholePrice !== goodsItem.wholePrice) || (newPiecePrice !== goodsItem.piecePrice);
+            if (priceChanged && !confirm("⚠️ 单价已修改，是否保存并更新库存价值？")) return;
+
+            goodsItem.spec = modalDiv.querySelector('#modalSpec').value;
+            goodsItem.wholePrice = newWholePrice;
+            goodsItem.wholeQty = parseFloat(modalDiv.querySelector('#modalWholeQty').value) || 0;
+            goodsItem.piecePrice = newPiecePrice;
+            goodsItem.pieceQty = parseFloat(modalDiv.querySelector('#modalPieceQty').value) || 0;
+
+            try {
+                updateSyncStatus('⏳ 保存中...');
+                await saveGoodsToServer(goodsItem);
+                updateSyncStatus('✅ 已保存');
+                renderCards();
+                modalDiv.remove();
+            } catch (e) {
+                alert('保存失败：' + e.message);
+                updateSyncStatus('❌ 保存失败');
+            }
+        };
+
+        deleteBtn.onclick = async () => {
+            if (confirm(`彻底删除「${goodsItem.name}」？`)) {
+                try {
+                    updateSyncStatus('⏳ 删除中...');
+                    await deleteGoodsFromServer([goodsItem.id]);
+                    goods = goods.filter(g => g.id !== goodsItem.id);
+                    updateSyncStatus('✅ 已删除');
+                    renderCards();
+                    modalDiv.remove();
+                } catch (e) {
+                    alert('删除失败：' + e.message);
+                    updateSyncStatus('❌ 删除失败');
+                }
+            }
+        };
+
+        cancelBtn.onclick = () => modalDiv.remove();
+        modalDiv.addEventListener('click', (e) => { if (e.target === modalDiv) modalDiv.remove(); });
+    }
+
+    // ---------- 添加商品模态框 ----------
+    function showAddGoodsModal() {
+        const modalDiv = document.createElement('div'); modalDiv.className = 'modal-mask';
+        modalDiv.innerHTML = `
+            <div class="modal-card">
+                <h3>➕ 添加新商品</h3>
+                <div class="form-row"><label>分类 *</label><select id="modalCategory"><option value="酒水食材">酒水食材</option><option value="易耗品">易耗品</option></select></div>
+                <div class="form-row"><label>品名 *</label><input id="modalName" placeholder="例：特级蟹柳" autocomplete="off"></div>
+                <div class="form-row"><label>规格</label><input id="modalSpec" placeholder="例：500g*20/件"></div>
+                <div class="form-row"><label>单位</label><input id="modalUnit" placeholder="件/袋/瓶" value="件"></div>
+                <div class="double-group">
+                    <div class="form-row"><label>整件单价 (¥)</label><input id="modalWholePrice" type="number" step="any" value="0"></div>
+                    <div class="form-row"><label>零散单价 (¥)</label><input id="modalPiecePrice" type="number" step="any" value="0"></div>
+                </div>
+                <div class="double-group">
+                    <div class="form-row"><label>整件数量</label><input id="modalWholeQty" type="number" step="any" value="0"></div>
+                    <div class="form-row"><label>零散数量</label><input id="modalPieceQty" type="number" step="any" value="0"></div>
+                </div>
+                <div class="modal-actions">
+                    <button id="modalConfirmBtn" style="background:#2c3e2f;">✅ 确认添加</button>
+                    <button id="modalCancelBtn" class="secondary">取消</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modalDiv);
+
+        const confirmBtn = modalDiv.querySelector('#modalConfirmBtn');
+        const cancelBtn = modalDiv.querySelector('#modalCancelBtn');
+
+        confirmBtn.onclick = async () => {
+            const name = modalDiv.querySelector('#modalName').value.trim();
+            if (!name) { alert("请填写品名"); return; }
+
+            const newId = goods.length > 0 ? Math.max(...goods.map(g => g.id)) + 1 : 1;
+            const newGoods = {
+                id: newId,
+                category: modalDiv.querySelector('#modalCategory').value,
+                name: name,
+                spec: modalDiv.querySelector('#modalSpec').value,
+                unit: modalDiv.querySelector('#modalUnit').value || "件",
+                wholePrice: parseFloat(modalDiv.querySelector('#modalWholePrice').value) || 0,
+                wholeQty: parseFloat(modalDiv.querySelector('#modalWholeQty').value) || 0,
+                piecePrice: parseFloat(modalDiv.querySelector('#modalPiecePrice').value) || 0,
+                pieceQty: parseFloat(modalDiv.querySelector('#modalPieceQty').value) || 0,
+            };
+
+            try {
+                updateSyncStatus('⏳ 添加中...');
+                await saveGoodsToServer(newGoods);
+                goods.push(newGoods);
+                updateSyncStatus('✅ 已添加');
+                renderCards();
+                modalDiv.remove();
+            } catch (e) {
+                alert('添加失败：' + e.message);
+                updateSyncStatus('❌ 添加失败');
+            }
+        };
+
+        cancelBtn.onclick = () => modalDiv.remove();
+        modalDiv.addEventListener('click', (e) => { if (e.target === modalDiv) modalDiv.remove(); });
+    }
+
+    // ---------- 批量操作 ----------
+    function toggleSelectAll() {
+        const cbs = document.querySelectorAll('.goods-checkbox');
+        const allChecked = Array.from(cbs).every(cb => cb.checked);
+        cbs.forEach(cb => cb.checked = !allChecked);
+    }
+
+    async function batchDeleteSelected() {
+        const checkedBoxes = document.querySelectorAll('.goods-checkbox:checked');
+        if (checkedBoxes.length === 0) return alert("未选中任何商品");
+        const ids = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
+        if (confirm(`删除 ${ids.length} 个选中的商品？`)) {
+            try {
+                updateSyncStatus('⏳ 删除中...');
+                await deleteGoodsFromServer(ids);
+                goods = goods.filter(g => !ids.includes(g.id));
+                updateSyncStatus('✅ 已删除');
+                renderCards();
+            } catch (e) {
+                alert('批量删除失败：' + e.message);
+                updateSyncStatus('❌ 删除失败');
+            }
+        }
+    }
+
+    async function resetAllQty() {
+        if (confirm('重置所有商品的盘点数量（整件+零散归零）？')) {
+            try {
+                updateSyncStatus('⏳ 重置中...');
+                const { error } = await supabase
+                    .from('goods')
+                    .update({ whole_qty: 0, piece_qty: 0 })
+                    .neq('id', 0);
+                if (error) throw error;
+                goods.forEach(g => { g.wholeQty = 0; g.pieceQty = 0; });
+                updateSyncStatus('✅ 已重置');
+                renderCards();
+            } catch (e) {
+                alert('重置失败：' + e.message);
+                updateSyncStatus('❌ 重置失败');
+            }
+        }
+    }
+
+    // ---------- 导入导出 ----------
+    function exportToExcel() {
+        const wsData = [["序号","分类","品名","规格","单位","整件单价","整件数量","零散单价","零散数量","库存价值"]];
+        goods.forEach((g,idx) => wsData.push([idx+1, g.category, g.name, g.spec, g.unit, g.wholePrice, g.wholeQty, g.piecePrice, g.pieceQty, computeValue(g)]));
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "跟斗九盘点");
+        XLSX.writeFile(wb, `跟斗九_盘点_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    async function importFromExcel(file) {
+        const reader = new FileReader();
+        reader.onload = async function(evt) {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+            if (rows.length < 2) return alert("无数据");
+            const newGoodsRaw = [];
+            for (let i=1; i<rows.length; i++) {
+                const r = rows[i];
+                if (!r[2]) continue;
+                newGoodsRaw.push({
+                    category: r[1] || "酒水食材",
+                    name: r[2],
+                    spec: r[3] || "",
+                    unit: r[4] || "",
+                    whole_price: parseFloat(r[5]) || 0,
+                    whole_qty: parseFloat(r[6]) || 0,
+                    piece_price: parseFloat(r[7]) || 0,
+                    piece_qty: parseFloat(r[8]) || 0,
+                });
+            }
+            if (newGoodsRaw.length === 0) return;
+            if (!confirm(`将用导入的 ${newGoodsRaw.length} 条数据替换当前全部数据，确定继续？`)) return;
+
+            try {
+                updateSyncStatus('⏳ 导入中（先清空再写入）...');
+                await deleteAllGoods();
+                await batchInsertGoods(newGoodsRaw);
+                updateSyncStatus('✅ 导入成功');
+                await loadDataFromServer();
+            } catch (e) {
+                alert('导入失败：' + e.message);
+                updateSyncStatus('❌ 导入失败');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // ---------- 事件绑定 ----------
+    document.getElementById('addGoodsBtn').onclick = () => showAddGoodsModal();
+    document.getElementById('selectAllBtn').onclick = () => toggleSelectAll();
+    document.getElementById('batchDeleteBtn').onclick = () => batchDeleteSelected();
+    document.getElementById('resetQtyBtn').onclick = () => resetAllQty();
+    document.getElementById('exportExcelBtn').onclick = () => exportToExcel();
+    document.getElementById('importExcelBtn').onclick = () => document.getElementById('importFileInput').click();
+    document.getElementById('importFileInput').onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) importFromExcel(file);
+        e.target.value = '';
+    };
+    document.getElementById('searchInput').addEventListener('input', (e) => { currentSearch = e.target.value; renderCards(); });
+
+    const tabs = document.querySelectorAll('.tab-btn');
+    tabs.forEach(btn => btn.addEventListener('click', () => {
+        tabs.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCategory = btn.getAttribute('data-filter');
+        renderCards();
+    }));
+
+    // ---------- 启动 ----------
+    window.addEventListener('load', async () => {
+        await loadDataFromServer();
+    });
+</script>
+</body>
+</html>
